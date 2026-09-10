@@ -17,14 +17,14 @@ export function AlertsPage() {
     return matchesFilter && `${alert.title} ${alert.description} ${alert.integration} ${alert.policy}`.toLowerCase().includes(search.toLowerCase())
   }), [remote.data, filter, search])
 
-  const acknowledge = async (alert: SecurityAlert) => {
+  const startInvestigation = async (alert: SecurityAlert) => {
     setWorkingId(alert.id)
     setActionError(undefined)
     try {
-      await cipherguardApi.acknowledgeAlert(alert.id)
+      await cipherguardApi.startAlertInvestigation(alert.id)
       await remote.refresh()
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Unable to acknowledge alert.')
+      setActionError(error instanceof Error ? error.message : 'Unable to start the alert investigation.')
     } finally {
       setWorkingId(undefined)
     }
@@ -41,15 +41,15 @@ export function AlertsPage() {
     {actionError && <ErrorBlock compact message={actionError} />}
     {remote.loading && !remote.data && <LoadingBlock rows={5} />}
     {remote.error && !remote.data && <ErrorBlock message={remote.error.message} onRetry={() => void remote.refresh()} />}
-    {remote.data && (alerts.length ? <section className="alerts-list">{alerts.map((alert) => <AlertCard key={alert.id} alert={alert} onAcknowledge={acknowledge} working={workingId === alert.id} />)}</section> : <EmptyBlock title="No matching alerts" body="The live alert API has no findings matching this view." />)}
+    {remote.data && (alerts.length ? <section className="alerts-list">{alerts.map((alert) => <AlertCard key={alert.id} alert={alert} onStartInvestigation={startInvestigation} working={workingId === alert.id} />)}</section> : <EmptyBlock title="No matching alerts" body="The live alert API has no findings matching this view." />)}
   </div>
 }
 
-function AlertCard({ alert, onAcknowledge, working }: { alert: SecurityAlert; onAcknowledge: (alert: SecurityAlert) => void; working: boolean }) {
-  const open = isOpen(alert.status)
+function AlertCard({ alert, onStartInvestigation, working }: { alert: SecurityAlert; onStartInvestigation: (alert: SecurityAlert) => void; working: boolean }) {
+  const open = alert.status.toLowerCase() === 'open'
   return <article className={`alert-card alert-card--${alert.severity.toLowerCase()}`}>
     <div className="alert-card__icon"><ShieldAlert size={20} /></div>
     <div className="alert-card__main"><div className="alert-card__title"><h2>{alert.title}</h2><StatusBadge value={alert.severity} /><StatusBadge value={alert.status} /></div>{alert.description && <p>{alert.description}</p>}<div className="alert-card__meta"><span>{alert.integration ?? 'No integration supplied'}</span><span>{alert.policy ?? 'No policy supplied'}</span><span>{formatTime(alert.createdAt)}</span></div></div>
-    <div className="alert-card__action">{open ? <button className="button button--secondary button--small" disabled={working} onClick={() => void onAcknowledge(alert)}><Check size={15} />{working ? 'Saving…' : 'Acknowledge'}</button> : <span className="resolved-label">{titleCase(alert.status)}</span>}</div>
+    <div className="alert-card__action">{open ? <button className="button button--secondary button--small" disabled={working} onClick={() => void onStartInvestigation(alert)}><Check size={15} />{working ? 'Saving…' : 'Start investigation'}</button> : <span className="resolved-label">{titleCase(alert.status)}</span>}</div>
   </article>
 }

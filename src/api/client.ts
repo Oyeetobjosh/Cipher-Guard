@@ -9,24 +9,26 @@ import {
 } from './normalizers'
 import type { Analytics, DashboardSnapshot, Integration, Policy, RawRecord, SecurityAlert, TrafficEvent } from './types'
 
-type Endpoint = 'dashboard' | 'integrations' | 'traffic' | 'alerts' | 'policies' | 'analytics'
+type Endpoint = 'integrations' | 'traffic' | 'trafficStats' | 'alerts' | 'policies' | 'analytics'
 type QueryValue = string | number | boolean | undefined
 
 const env = import.meta.env
 const configuredBase = (env.VITE_API_BASE_URL ?? '').trim()
 const API_BASE = configuredBase === '/' ? '' : configuredBase.replace(/\/$/, '')
+
+/** Exact resource paths from the CipherGuard management API contract. */
 const defaults: Record<Endpoint, string> = {
-  dashboard: '/api/dashboard',
-  integrations: '/api/integrations',
-  traffic: '/api/traffic',
-  alerts: '/api/alerts',
-  policies: '/api/policies',
-  analytics: '/api/analytics',
+  integrations: '/api/v1/integrations',
+  traffic: '/api/v1/traffic',
+  trafficStats: '/api/v1/traffic/stats',
+  alerts: '/api/v1/alerts',
+  policies: '/api/v1/policies',
+  analytics: '/api/v1/analytics/overview',
 }
 const configuredPaths: Record<Endpoint, string | undefined> = {
-  dashboard: env.VITE_API_DASHBOARD_PATH,
   integrations: env.VITE_API_INTEGRATIONS_PATH,
   traffic: env.VITE_API_TRAFFIC_PATH,
+  trafficStats: env.VITE_API_TRAFFIC_STATS_PATH,
   alerts: env.VITE_API_ALERTS_PATH,
   policies: env.VITE_API_POLICIES_PATH,
   analytics: env.VITE_API_ANALYTICS_PATH,
@@ -72,8 +74,8 @@ const headers = (hasBody = false): HeadersInit => {
   const token = env.VITE_API_TOKEN?.trim()
   if (token) {
     const header = env.VITE_API_AUTH_HEADER?.trim() || 'Authorization'
-    const scheme = env.VITE_API_AUTH_SCHEME?.trim()
-    result[header] = scheme ? `${scheme} ${token}` : token
+    const scheme = env.VITE_API_AUTH_SCHEME?.trim() || 'Bearer'
+    result[header] = `${scheme} ${token}`
   }
   if (hasBody) result['Content-Type'] = 'application/json'
   return result
@@ -107,7 +109,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 export const apiConfig = {
   baseUrl: API_BASE,
-  isConfigured: Boolean(configuredBase || configuredPaths.dashboard?.startsWith('http')),
+  isConfigured: Boolean(configuredBase || configuredPaths.integrations?.startsWith('http')),
 }
 
 export const cipherguardApi = {
@@ -123,33 +125,33 @@ export const cipherguardApi = {
     return toRecords(await request<unknown>(endpointUrl('traffic', query))).map(normalizeTraffic)
   },
 
+  async getTrafficStats(): Promise<RawRecord> {
+    return unwrapRecord(await request<unknown>(endpointUrl('trafficStats')))
+  },
+
   async getAlerts(query?: Record<string, QueryValue>): Promise<SecurityAlert[]> {
     return toRecords(await request<unknown>(endpointUrl('alerts', query))).map(normalizeAlert)
   },
 
-  async getPolicies(): Promise<Policy[]> {
-    return toRecords(await request<unknown>(endpointUrl('policies'))).map(normalizePolicy)
+  async getPolicies(query?: Record<string, QueryValue>): Promise<Policy[]> {
+    return toRecords(await request<unknown>(endpointUrl('policies', query))).map(normalizePolicy)
   },
 
-  async getAnalytics(query?: Record<string, QueryValue>): Promise<Analytics> {
-    return normalizeAnalytics(await request<unknown>(endpointUrl('analytics', query)))
+  async getAnalytics(): Promise<Analytics> {
+    return normalizeAnalytics(await request<unknown>(endpointUrl('analytics')))
   },
 
-  async getDashboard(): Promise<RawRecord> {
-    return unwrapRecord(await request<unknown>(endpointUrl('dashboard')))
-  },
-
-  async acknowledgeAlert(id: string): Promise<void> {
+  async startAlertInvestigation(id: string): Promise<void> {
     await request<unknown>(resourceUrl('alerts', id), {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'acknowledged' }),
+      body: JSON.stringify({ status: 'investigating' }),
     })
   },
 
   async setPolicyEnabled(id: string, enabled: boolean): Promise<void> {
     await request<unknown>(resourceUrl('policies', id), {
       method: 'PATCH',
-      body: JSON.stringify({ enabled }),
+      body: JSON.stringify({ is_active: enabled }),
     })
   },
 }
@@ -163,28 +165,25 @@ const settled = async <T>(label: string, call: () => Promise<T>, unavailable: st
   }
 }
 
-/**
- * Dashboard values are composed from live resource APIs so that a missing optional
- * summary endpoint does not make the rest of the operations console unusable.
- */
+/** Dashboard data uses the management endpoints provided by the uploaded CipherGuard API. */
 export async function loadDashboard(): Promise<DashboardSnapshot> {
   const unavailable: string[] = []
-  const [integrations, traffic, alerts, policies, analytics, dashboard] = await Promise.all([
+  const [integrations, traffic, trafficStats, alerts, policies, analytics] = await Promise.all([
     settled('integrations', () => cipherguardApi.getIntegrations(), unavailable),
     settled('traffic', () => cipherguardApi.getTraffic({ limit: 100 }), unavailable),
+    settled('traffic statistics', () => cipherguardApi.getTrafficStats(), unavailable),
     settled('alerts', () => cipherguardApi.getAlerts({ limit: 100 }), unavailable),
     settled('policies', () => cipherguardApi.getPolicies(), unavailable),
-    settled('analytics', () => cipherguardApi.getAnalytics({ period: '24h' }), unavailable),
-    settled('dashboard', () => cipherguardApi.getDashboard(), unavailable),
+    settled('risk analytics', () => cipherguardApi.getAnalytics(), unavailable),
   ])
 
   return {
     integrations: integrations ?? [],
     traffic: traffic ?? [],
+    trafficStats,
     alerts: alerts ?? [],
     policies: policies ?? [],
     analytics,
-    dashboard,
     unavailable,
   }
 }

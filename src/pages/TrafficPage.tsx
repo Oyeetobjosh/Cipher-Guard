@@ -9,12 +9,18 @@ export function TrafficPage() {
   const [period, setPeriod] = useState('24h')
   const [decision, setDecision] = useState('all')
   const [search, setSearch] = useState('')
-  const remote = useRemote(() => cipherguardApi.getTraffic({ period, decision: decision === 'all' ? undefined : decision, limit: 250 }), [period, decision])
-  const traffic = useMemo(() => (remote.data ?? []).filter((event) => {
-    const matchesSearch = `${event.endpoint} ${event.integration} ${event.source} ${event.policy}`.toLowerCase().includes(search.toLowerCase())
-    const matchesDecision = decision === 'all' || (decision === 'blocked' ? isBlocked(event.decision) : isAllowed(event.decision))
-    return matchesSearch && matchesDecision
-  }), [remote.data, search, decision])
+  const remote = useRemote(() => cipherguardApi.getTraffic({ decision: decision === 'all' ? undefined : decision === 'blocked' ? 'BLOCK' : 'ALLOW', limit: 250 }), [decision])
+  const traffic = useMemo(() => {
+    const durationMs = period === '1h' ? 3_600_000 : period === '24h' ? 86_400_000 : 604_800_000
+    const cutoff = Date.now() - durationMs
+    return (remote.data ?? []).filter((event) => {
+      const observed = event.timestamp ? new Date(event.timestamp).getTime() : NaN
+      const matchesPeriod = Number.isNaN(observed) || observed >= cutoff
+      const matchesSearch = `${event.endpoint} ${event.integration} ${event.source} ${event.policy}`.toLowerCase().includes(search.toLowerCase())
+      const matchesDecision = decision === 'all' || (decision === 'blocked' ? isBlocked(event.decision) : isAllowed(event.decision))
+      return matchesPeriod && matchesSearch && matchesDecision
+    })
+  }, [remote.data, search, decision, period])
   const blocked = traffic.filter((event) => isBlocked(event.decision)).length
   const allowed = traffic.filter((event) => isAllowed(event.decision)).length
 

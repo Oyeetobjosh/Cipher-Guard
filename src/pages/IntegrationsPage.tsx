@@ -35,7 +35,7 @@ function IntegrationCard({ integration }: { integration: Integration }) {
   return <Link to={`/integrations/${encodeURIComponent(integration.id)}`} className="integration-card">
     <div className="integration-card__top"><span className="provider-avatar">{integration.provider.slice(0, 1).toUpperCase()}</span><StatusBadge value={integration.status} /></div>
     <div className="integration-card__title"><h2>{integration.name}</h2><p>{integration.provider} · {integration.type}</p></div>
-    <div className="integration-card__metrics"><div><span>Protected</span><strong>{formatNumber(integration.protectedRequests)}</strong></div><div><span>Blocked</span><strong>{formatNumber(integration.blockedRequests)}</strong></div></div>
+    <div className="integration-card__metrics"><div><span>Endpoints observed</span><strong>{formatNumber(integration.observedEndpoints)}</strong></div><div><span>Risk score</span><strong>{formatNumber(integration.riskScore)}</strong></div></div>
     <div className="integration-card__foot"><span>Last activity: {formatTime(integration.lastSeen)}</span><ArrowRight size={17} /></div>
   </Link>
 }
@@ -72,8 +72,8 @@ export function IntegrationDetailPage() {
         <div className="detail-health"><span>Risk score</span><strong>{formatNumber(data.integration.riskScore)}</strong></div>
       </section>
       <section className="metric-grid metric-grid--three">
-        <MetricCard label="Protected requests" value={data.integration.protectedRequests} />
-        <MetricCard label="Blocked requests" value={data.integration.blockedRequests} tone="danger" />
+        <MetricCard label="Endpoints observed" value={data.integration.observedEndpoints} />
+        <MetricCard label="Related traffic returned" value={data.traffic.length} />
         <MetricCard label="Open related alerts" value={data.alerts.filter((alert) => isOpen(alert.status)).length} tone="danger" />
       </section>
       <section className="dashboard-split dashboard-split--tables">

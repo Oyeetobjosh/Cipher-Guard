@@ -1,26 +1,77 @@
 # CipherGuard Security Dashboard
 
-A responsive operations console for the CipherGuard backend. It does not seed security data: all displayed counts, traffic events, alerts, policy values, integrations, and risk insights are requested from the configured API.
+A responsive operations dashboard for the included CipherGuard security gateway. The uploaded project archive has been integrated into this repository: it contains the FastAPI security API, Kong gateway configuration, simulated ShipFast/PayFlex integrations, Supabase schema, deployment manifests, and this React dashboard.
 
-## Connect the deployed backend
+The dashboard never seeds security data. Metrics, integration inventory, traffic events, alerts, policies, and risk scores are requested from the CipherGuard management API.
 
-1. Copy `.env.example` to `.env.local`.
-2. Set `VITE_API_BASE_URL` to the deployed CipherGuard API origin (for example, `https://api.example.com`).
-3. Set the token settings if the API uses a bearer token. Cookie-authenticated backends can leave `VITE_API_TOKEN` empty.
-4. If endpoint paths differ from the defaults, override the corresponding `VITE_API_*_PATH` variable.
+## Dashboard capabilities
 
-The dashboard expects conventional JSON resources at `/api/dashboard`, `/api/integrations`, `/api/traffic`, `/api/alerts`, `/api/policies`, and `/api/analytics`. The client accepts either a top-level array or common envelopes such as `{ "data": [] }` and `{ "items": [] }`.
+- **Dashboard** — `traffic/stats`, `analytics/overview`, current integrations, alerts, policies, and recent traffic
+- **Integrations + detail** — inventory and individual integration telemetry / alert context
+- **Traffic** — management API traffic log with decision, time-window, and text filters
+- **Alerts** — live triage queue; an open alert can be moved to the backend-supported `investigating` state
+- **Policies** — live policy inventory and active-state updates
+- **Risk analytics** — risk-engine overview and per-integration risk breakdown
 
-> **CORS:** The deployed backend needs to allow the dashboard origin and the configured authentication header. For local development, set `VITE_API_BASE_URL=/` and `VITE_API_PROXY_TARGET=https://your-api-host` to proxy browser requests through Vite.
+## API contract used
 
-## Run
+These are the exact routes from [`docs/API.md`](docs/API.md), all prefixed by the public CipherGuard gateway origin:
+
+| Purpose | Route |
+| --- | --- |
+| Integrations | `GET /api/v1/integrations` |
+| Integration detail | `GET /api/v1/integrations/{id_or_slug}` |
+| Traffic events | `GET /api/v1/traffic` |
+| Traffic totals | `GET /api/v1/traffic/stats` |
+| Alerts | `GET /api/v1/alerts` |
+| Alert triage | `PATCH /api/v1/alerts/{alert_id}` |
+| Policies | `GET /api/v1/policies` |
+| Policy update | `PATCH /api/v1/policies/{policy_id}` |
+| Risk overview | `GET /api/v1/analytics/overview` |
+
+The browser client sends `Authorization: Bearer <VITE_API_TOKEN>` when a token is configured. In local development the provided backend supplies a default SecOps tenant when no JWT is present. Do **not** expose `SUPABASE_SERVICE_ROLE_KEY` to the browser.
+
+## Configure the deployed backend
+
+```bash
+cp .env.example .env.local
+```
+
+Set the public gateway origin in `.env.local`:
+
+```env
+VITE_API_BASE_URL=https://your-deployed-cipherguard-gateway.example
+VITE_API_TOKEN=your_supabase_user_access_token
+```
+
+The default Vite endpoint paths already match the backend. They are individually overridable in `.env.example` only for a custom deployment. The deployed backend must allow the dashboard origin in `ALLOWED_ORIGINS` (or be proxied through the dashboard host).
+
+## Run the dashboard
 
 ```bash
 npm install
 npm run dev
 ```
 
-Build verification:
+For local browser requests through Vite rather than CORS, use:
+
+```env
+VITE_API_BASE_URL=/
+VITE_API_PROXY_TARGET=http://localhost:8000
+```
+
+## Run the CipherGuard stack locally
+
+The uploaded project starts Kong on port `8000`, the management API on `8003`, ShipFast on `8002`, and PayFlex on `8006`.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+See [`docs/API.md`](docs/API.md) for management API details, protected gateway calls, and E2E verification scenarios. The archive’s original engineering guide is retained at [`docs/backend-README.md`](docs/backend-README.md).
+
+## Build check
 
 ```bash
 npm run build

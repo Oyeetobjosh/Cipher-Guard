@@ -70,10 +70,13 @@ export const normalizeIntegration = (raw: RawRecord): Integration => ({
   provider: text(first(raw, ['provider', 'vendor', 'service', 'platform'])) ?? 'Custom',
   type: text(first(raw, ['type', 'category', 'integration_type', 'integrationType'])) ?? 'Integration',
   status: text(first(raw, ['status', 'state', 'health'])) ?? 'unknown',
-  lastSeen: text(first(raw, ['last_seen', 'lastSeen', 'last_activity', 'lastActivity', 'updated_at', 'updatedAt'])),
+  lastSeen: text(first(raw, ['last_seen', 'lastSeen', 'last_activity', 'lastActivity', 'last_activity_at', 'lastActivityAt', 'updated_at', 'updatedAt'])),
+  observedEndpoints: number(first(raw, ['observed_endpoints_count', 'observedEndpointsCount'])),
   protectedRequests: number(first(raw, ['protected_requests', 'protectedRequests', 'requests', 'request_count'])),
   blockedRequests: number(first(raw, ['blocked_requests', 'blockedRequests', 'blocked', 'block_count'])),
   riskScore: number(first(raw, ['risk_score', 'riskScore', 'risk'])),
+  gatewayUrl: text(first(raw, ['gateway_url', 'gatewayUrl', 'protected_endpoint', 'protectedEndpoint'])),
+  description: text(first(raw, ['description', 'summary', 'details'])),
   raw,
 })
 
@@ -102,7 +105,7 @@ export const normalizeAlert = (raw: RawRecord): SecurityAlert => ({
   createdAt: text(first(raw, ['created_at', 'createdAt', 'timestamp', 'time', 'detected_at', 'detectedAt'])),
   integration: text(first(raw, ['integration_name', 'integrationName', 'integration', 'service'])),
   integrationId: text(first(raw, ['integration_id', 'integrationId'])),
-  policy: text(first(raw, ['policy_name', 'policyName', 'policy', 'rule'])),
+  policy: text(first(raw, ['policy_name', 'policyName', 'policy', 'rule', 'rule_violated', 'ruleViolated'])),
   raw,
 })
 
@@ -110,9 +113,9 @@ export const normalizePolicy = (raw: RawRecord): Policy => ({
   id: text(first(raw, ['id', '_id', 'policy_id', 'policyId', 'uuid'])) ?? '',
   name: text(first(raw, ['name', 'title', 'policy_name', 'policyName'])) ?? 'Untitled policy',
   description: text(first(raw, ['description', 'summary', 'details'])),
-  enabled: boolean(first(raw, ['enabled', 'is_enabled', 'isEnabled', 'active', 'status'])) ?? false,
-  mode: text(first(raw, ['mode', 'action', 'enforcement', 'enforcement_mode', 'enforcementMode'])),
-  scope: text(first(raw, ['scope', 'applies_to', 'appliesTo', 'target'])),
+  enabled: boolean(first(raw, ['enabled', 'is_enabled', 'isEnabled', 'is_active', 'isActive', 'active', 'status'])) ?? false,
+  mode: text(first(raw, ['mode', 'action', 'action_on_violation', 'actionOnViolation', 'enforcement', 'enforcement_mode', 'enforcementMode'])),
+  scope: text(first(raw, ['scope', 'applies_to', 'appliesTo', 'target', 'allowed_endpoints', 'allowedEndpoints'])),
   updatedAt: text(first(raw, ['updated_at', 'updatedAt', 'modified_at', 'modifiedAt'])),
   violations: number(first(raw, ['violations', 'violation_count', 'violationCount', 'matches'])),
   raw,
@@ -137,7 +140,17 @@ export const normalizeAnalytics = (payload: unknown): Analytics => {
           value: number(value) ?? text(value),
           raw: { [label]: value },
         }))
-      : []
+      : ([
+          ['Overall risk score', first(raw, ['overall_risk_score', 'overallRiskScore'])],
+          ['Active alerts', first(raw, ['total_active_alerts', 'totalActiveAlerts'])],
+          ['Critical alerts', first(raw, ['critical_alerts_count', 'criticalAlertsCount'])],
+          ['Observed events (24h)', first(raw, ['total_observed_events_24h', 'totalObservedEvents24h'])],
+          ['Violations (24h)', first(raw, ['violations_count_24h', 'violationsCount24h'])],
+        ] as Array<[string, unknown]>).filter(([, value]) => value !== undefined).map(([label, value]) => ({
+          label,
+          value: number(value) ?? text(value),
+          raw: { [label]: value },
+        }))
 
   const seriesInput = first(raw, ['traffic_series', 'trafficSeries', 'timeseries', 'time_series', 'series', 'chart'])
   const trafficSeries: TimeSeriesPoint[] = Array.isArray(seriesInput)
@@ -152,11 +165,11 @@ export const normalizeAnalytics = (payload: unknown): Analytics => {
       }))
     : []
 
-  const risksInput = first(raw, ['risks', 'risk_insights', 'riskInsights', 'top_risks', 'topRisks'])
+  const risksInput = first(raw, ['risks', 'risk_insights', 'riskInsights', 'top_risks', 'topRisks', 'integration_risk_breakdown', 'integrationRiskBreakdown'])
   const risks: RiskInsight[] = Array.isArray(risksInput)
     ? risksInput.filter(isRecord).map((item, index) => ({
-        id: text(first(item, ['id', '_id', 'name', 'label'])) ?? String(index),
-        name: text(first(item, ['name', 'title', 'label', 'category'])) ?? 'Risk finding',
+        id: text(first(item, ['id', '_id', 'name', 'label', 'slug'])) ?? String(index),
+        name: text(first(item, ['name', 'title', 'label', 'category', 'slug'])) ?? 'Risk finding',
         score: number(first(item, ['score', 'risk_score', 'riskScore', 'value'])),
         level: text(first(item, ['level', 'severity', 'risk_level', 'riskLevel'])),
         trend: text(first(item, ['trend', 'direction'])),

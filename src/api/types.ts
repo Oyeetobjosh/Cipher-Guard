@@ -7,9 +7,12 @@ export interface Integration {
   type: string
   status: string
   lastSeen?: string
+  observedEndpoints?: number
   protectedRequests?: number
   blockedRequests?: number
   riskScore?: number
+  gatewayUrl?: string
+  description?: string
   raw: RawRecord
 }
 
@@ -95,6 +98,6 @@ export interface DashboardSnapshot {
   alerts: SecurityAlert[]
   policies: Policy[]
   analytics?: Analytics
-  dashboard?: RawRecord
+  trafficStats?: RawRecord
   unavailable: string[]
 }
