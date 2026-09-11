@@ -1,0 +1,33 @@
+# JavaScript build/development output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Testing, logs, IDE, and OS files
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+*.sqlite3
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
