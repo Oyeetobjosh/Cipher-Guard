@@ -13,7 +13,7 @@ type Endpoint = 'integrations' | 'traffic' | 'trafficStats' | 'alerts' | 'polici
 type QueryValue = string | number | boolean | undefined
 
 const env = import.meta.env
-const configuredBase = (env.VITE_API_BASE_URL ?? '').trim()
+const configuredBase = (env.VITE_API_BASE_URL ?? '/').trim() || '/'
 const API_BASE = configuredBase === '/' ? '' : configuredBase.replace(/\/$/, '')
 
 /** Exact resource paths from the CipherGuard management API contract. */

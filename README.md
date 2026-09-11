@@ -46,7 +46,18 @@ VITE_API_TOKEN=your_supabase_user_access_token
 
 The default Vite endpoint paths already match the backend. They are individually overridable in `.env.example` only for a custom deployment. The deployed backend must allow the dashboard origin in `ALLOWED_ORIGINS` (or be proxied through the dashboard host).
 
-## Run the dashboard
+## Deploy the dashboard to Vercel
+
+This repository is Vercel-ready. The dashboard build is served as a Vite site and [`vercel.json`](vercel.json) rewrites same-origin `/api/*` requests to the included FastAPI serverless entrypoint at [`api/index.py`](api/index.py).
+
+1. Import `Oyeetobjosh/Cipher-Guard` in Vercel with the **repository root** as the Root Directory.
+2. Leave the build settings at their detected values (`npm install`, `npm run build`, output `dist`).
+3. Deploy. No `VITE_API_BASE_URL` is required for this setup: it defaults to `/` and talks to the same Vercel domain.
+4. For a real persistent deployment, add the backend `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`, and `SUPABASE_JWT_SECRET` values in Vercel Project Settings → Environment Variables. Never configure a service-role key as a `VITE_*` value.
+
+> The Vercel function makes the management dashboard APIs available. The full inline blocking gateway in the archive (Kong + ShipFast/PayFlex containers) remains a Docker/VPS deployment because Vercel serverless functions cannot run the supplied multi-container Kong gateway. Use the provided `docker-compose.yml` or the deployment manifests for the full intercept-and-forward demo.
+
+## Run the dashboard locally
 
 ```bash
 npm install
