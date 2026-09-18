@@ -7,9 +7,21 @@ import {
   toRecords,
   unwrapRecord,
 } from './normalizers'
-import type { Analytics, DashboardSnapshot, Integration, Policy, RawRecord, SecurityAlert, TrafficEvent } from './types'
+import type {
+  Analytics,
+  DashboardSnapshot,
+  Integration,
+  IntegrationCreatePayload,
+  Policy,
+  PolicyCreatePayload,
+  RawRecord,
+  SecurityAlert,
+  TrafficEvent,
+} from './types'
+import { slugify } from '../lib'
 
 type Endpoint = 'integrations' | 'traffic' | 'trafficStats' | 'alerts' | 'policies' | 'analytics'
+type ResourceEndpoint = 'integrations' | 'traffic' | 'alerts' | 'policies'
 type QueryValue = string | number | boolean | undefined
 
 const env = import.meta.env
@@ -58,7 +70,7 @@ const endpointUrl = (endpoint: Endpoint, query?: Record<string, QueryValue>): st
   return params.size ? `${url}${url.includes('?') ? '&' : '?'}${params}` : url
 }
 
-const resourceUrl = (endpoint: 'integrations' | 'alerts' | 'policies', id: string): string => {
+const resourceUrl = (endpoint: ResourceEndpoint, id: string): string => {
   const template = configuredPaths[endpoint]?.trim() || defaults[endpoint]
   const resource = encodeURIComponent(id)
   const path = template.includes(':id')
@@ -97,7 +109,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const payload: unknown = contentType.includes('json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '')
   if (!response.ok) {
     const detail = typeof payload === 'object' && payload !== null
-      ? String((payload as RawRecord).message ?? (payload as RawRecord).error ?? response.statusText)
+      ? String((payload as RawRecord).message ?? (payload as RawRecord).detail ?? (payload as RawRecord).error ?? response.statusText)
       : response.statusText
     throw new ApiError(detail || `Request failed with status ${response.status}`, url, response.status)
   }
@@ -106,6 +118,11 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   }
   return payload as T
 }
+
+const authHeaderFor = (authType: string) => authType === 'api_key' ? 'X-API-Key' : 'Authorization'
+
+const policyName = (payload: PolicyCreatePayload) =>
+  `${payload.ruleType === 'block' ? 'Block' : 'Allow'} ${payload.method.toUpperCase()} ${payload.endpointPattern}`
 
 export const apiConfig = {
   baseUrl: API_BASE,
@@ -121,8 +138,32 @@ export const cipherguardApi = {
     return normalizeIntegration(unwrapRecord(await request<unknown>(resourceUrl('integrations', id))))
   },
 
+  async createIntegration(payload: IntegrationCreatePayload): Promise<Integration> {
+    const body = {
+      name: payload.name.trim(),
+      slug: slugify(payload.name),
+      category: 'Other',
+      upstream_url: payload.upstreamUrl.trim(),
+      base_url: payload.upstreamUrl.trim(),
+      auth_type: payload.authType,
+      auth_header_name: authHeaderFor(payload.authType),
+      auth_credential: payload.authType === 'none' ? undefined : payload.credential,
+      status: 'monitoring',
+      description: payload.description?.trim() || undefined,
+      metadata: {},
+    }
+    return normalizeIntegration(unwrapRecord(await request<unknown>(endpointUrl('integrations'), {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })))
+  },
+
   async getTraffic(query?: Record<string, QueryValue>): Promise<TrafficEvent[]> {
     return toRecords(await request<unknown>(endpointUrl('traffic', query))).map(normalizeTraffic)
+  },
+
+  async getTrafficEvent(id: string): Promise<TrafficEvent> {
+    return normalizeTraffic(unwrapRecord(await request<unknown>(resourceUrl('traffic', id))))
   },
 
   async getTrafficStats(): Promise<RawRecord> {
@@ -135,6 +176,26 @@ export const cipherguardApi = {
 
   async getPolicies(query?: Record<string, QueryValue>): Promise<Policy[]> {
     return toRecords(await request<unknown>(endpointUrl('policies', query))).map(normalizePolicy)
+  },
+
+  async createPolicy(payload: PolicyCreatePayload): Promise<Policy> {
+    const method = payload.method.toUpperCase()
+    const endpointPattern = payload.endpointPattern.trim()
+    const isBlock = payload.ruleType === 'block'
+    const body = {
+      integration_id: payload.integrationId,
+      name: policyName(payload),
+      description: payload.description?.trim() || undefined,
+      allowed_methods: method === 'ALL' ? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] : [method],
+      allowed_endpoints: isBlock ? ['/*'] : [endpointPattern],
+      blocked_endpoints: isBlock ? [endpointPattern] : [],
+      action_on_violation: payload.action === 'allow' ? 'log' : payload.action,
+      is_active: true,
+    }
+    return normalizePolicy(unwrapRecord(await request<unknown>(endpointUrl('policies'), {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })))
   },
 
   async getAnalytics(): Promise<Analytics> {
@@ -165,7 +226,7 @@ const settled = async <T>(label: string, call: () => Promise<T>, unavailable: st
   }
 }
 
-/** Dashboard data uses the management endpoints provided by the uploaded CipherGuard API. */
+/** Dashboard data uses the management endpoints provided by the CipherGuard API. */
 export async function loadDashboard(): Promise<DashboardSnapshot> {
   const unavailable: string[] = []
   const [integrations, traffic, trafficStats, alerts, policies, analytics] = await Promise.all([

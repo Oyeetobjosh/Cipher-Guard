@@ -5,7 +5,6 @@ import { AlertsPage } from './pages/AlertsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { IntegrationDetailPage, IntegrationsPage } from './pages/IntegrationsPage'
 import { PoliciesPage } from './pages/PoliciesPage'
-import { RiskPage } from './pages/RiskPage'
 import { TrafficPage } from './pages/TrafficPage'
 import './styles.css'
 
@@ -15,9 +14,8 @@ export default function App() {
     <Route path="/integrations" element={<IntegrationsPage />} />
     <Route path="/integrations/:id" element={<IntegrationDetailPage />} />
     <Route path="/traffic" element={<TrafficPage />} />
-    <Route path="/alerts" element={<AlertsPage />} />
     <Route path="/policies" element={<PoliciesPage />} />
-    <Route path="/risk" element={<RiskPage />} />
+    <Route path="/alerts" element={<AlertsPage />} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></AppShell></BrowserRouter>
 }

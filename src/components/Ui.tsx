@@ -16,9 +16,9 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
 export function StatusBadge({ value }: { value?: string }) {
   const normalized = (value ?? 'unknown').toLowerCase()
   let tone = 'neutral'
-  if (['active', 'healthy', 'connected', 'enabled', 'allowed', 'low', 'resolved', 'acknowledged'].some((item) => normalized.includes(item))) tone = 'positive'
-  if (['critical', 'high', 'blocked', 'denied', 'error', 'failed'].some((item) => normalized.includes(item))) tone = 'critical'
-  if (['medium', 'warning', 'pending', 'degraded', 'open'].some((item) => normalized.includes(item))) tone = 'warning'
+  if (['active', 'healthy', 'connected', 'enabled', 'allowed', 'allow', 'low', 'resolved', 'acknowledged'].some((item) => normalized.includes(item))) tone = 'positive'
+  if (['critical', 'high', 'blocked', 'block', 'denied', 'deny', 'rejected', 'error', 'failed'].some((item) => normalized.includes(item))) tone = 'critical'
+  if (['medium', 'warning', 'pending', 'degraded', 'open', 'flag'].some((item) => normalized.includes(item))) tone = 'warning'
   return <span className={`status-badge status-badge--${tone}`}><i />{titleCase(value)}</span>
 }
 

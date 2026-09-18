@@ -1,4 +1,4 @@
-import type { RawRecord, TimeSeriesPoint, TrafficEvent } from './api/types'
+import type { AuthType, Integration, RawRecord, TimeSeriesPoint, TrafficEvent } from './api/types'
 
 export const humanize = (value?: string) => (value ? value.replace(/[_-]/g, ' ') : 'Unknown')
 
@@ -25,6 +25,13 @@ export const formatTime = (value?: string) => {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(date)
 }
 
+export const formatFullTime = (value?: string) => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'medium' }).format(date)
+}
+
 export const normalizeWord = (value?: string) => (value ?? '').trim().toLowerCase()
 export const isBlocked = (value?: string) => ['blocked', 'block', 'denied', 'deny', 'rejected', 'reject'].includes(normalizeWord(value))
 export const isAllowed = (value?: string) => ['allowed', 'allow', 'permitted', 'passed', 'pass', 'success'].includes(normalizeWord(value))
@@ -42,6 +49,55 @@ export const pickNumber = (record: RawRecord | undefined, keys: string[]): numbe
     }
   }
   return undefined
+}
+
+export const pickString = (record: RawRecord | undefined, keys: string[]): string | undefined => {
+  if (!record) return undefined
+  for (const key of keys) {
+    const input = record[key]
+    if (typeof input === 'string' && input.trim()) return input
+    if (typeof input === 'number' || typeof input === 'boolean') return String(input)
+  }
+  return undefined
+}
+
+export const slugify = (value: string) => value
+  .toLowerCase()
+  .trim()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 80) || `integration-${Date.now()}`
+
+export const integrationKey = (integration: Integration) => integration.id || integration.slug || integration.name
+
+export const formatAuthType = (authType?: string) => {
+  const normalized = normalizeWord(authType)
+  if (!normalized || normalized === 'none') return 'None'
+  if (normalized === 'api_key') return 'API Key'
+  if (normalized === 'bearer_token') return 'Bearer Token'
+  if (normalized === 'basic_auth') return 'Basic Auth'
+  return titleCase(authType)
+}
+
+export const credentialStatus = (authType?: string | AuthType, hasCredential?: boolean) => {
+  if (normalizeWord(authType) === 'none') return 'None required'
+  if (hasCredential === false) return 'Not configured'
+  return 'Configured ••••••••'
+}
+
+export const forwardedLabel = (event: TrafficEvent) => {
+  if (event.forwardedUpstream !== undefined) return event.forwardedUpstream ? 'Yes' : 'No'
+  if (isBlocked(event.decision)) return 'No — blocked before upstream'
+  if (isAllowed(event.decision)) return 'Likely forwarded'
+  return 'Not reported'
+}
+
+export const trafficStatusLabel = (event: TrafficEvent) => {
+  if (isBlocked(event.decision)) {
+    const status = event.statusCode ?? 403
+    return `BLOCKED — ${status}${status === 403 ? ' Forbidden' : ''}`
+  }
+  return event.statusCode ? `${event.statusCode}` : '—'
 }
 
 export function deriveTrafficSeries(traffic: TrafficEvent[]): TimeSeriesPoint[] {
