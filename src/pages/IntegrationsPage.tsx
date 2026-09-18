@@ -1,12 +1,12 @@
-import { ArrowRight, Boxes, Globe2, KeyRound, Plus, Search, ShieldCheck, X } from 'lucide-react'
+import { ArrowRight, Boxes, Check, Copy, Globe2, KeyRound, Plus, Search, ShieldCheck, Trash2, X } from 'lucide-react'
 import { FormEvent, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { cipherguardApi } from '../api/client'
 import type { AuthType, Integration, TrafficEvent } from '../api/types'
 import { RequestDetailsModal } from '../components/RequestDetails'
 import { EmptyBlock, ErrorBlock, LoadingBlock, MetricCard, PageHeader, RefreshButton, StatusBadge } from '../components/Ui'
 import { useRemote } from '../hooks/useRemote'
-import { credentialStatus, formatAuthType, formatNumber, formatTime, integrationKey, isAllowed, isBlocked, isOpen } from '../lib'
+import { credentialStatus, formatAuthType, formatNumber, formatTime, integrationKey, integrationProxyUrl, isAllowed, isBlocked } from '../lib'
 
 type IntegrationFormState = {
   name: string
@@ -31,6 +31,10 @@ export function IntegrationsPage() {
   const [form, setForm] = useState<IntegrationFormState>(emptyIntegrationForm)
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState<string>()
+  const [createdIntegration, setCreatedIntegration] = useState<Integration>()
+  const [deleteTarget, setDeleteTarget] = useState<Integration>()
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
   const integrations = remote.data ?? []
   const filtered = useMemo(() => integrations.filter((item) => `${item.name} ${item.type} ${item.status} ${item.upstreamUrl}`.toLowerCase().includes(query.toLowerCase())), [integrations, query])
   const active = integrations.filter((item) => ['active', 'healthy', 'connected', 'monitoring'].includes(item.status.toLowerCase())).length
@@ -40,13 +44,14 @@ export function IntegrationsPage() {
     setSaving(true)
     setActionError(undefined)
     try {
-      await cipherguardApi.createIntegration({
+      const integration = await cipherguardApi.createIntegration({
         name: form.name,
         description: form.description || undefined,
         upstreamUrl: form.upstreamUrl,
         authType: form.authType,
         credential: form.authType === 'none' ? undefined : form.credential,
       })
+      setCreatedIntegration(integration)
       setForm(emptyIntegrationForm)
       setShowForm(false)
       await remote.refresh()
@@ -54,6 +59,21 @@ export function IntegrationsPage() {
       setActionError(error instanceof Error ? error.message : 'Unable to save integration.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(undefined)
+    try {
+      await cipherguardApi.deleteIntegration(integrationKey(deleteTarget))
+      await remote.refresh()
+      setDeleteTarget(undefined)
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Unable to delete integration.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -81,6 +101,11 @@ export function IntegrationsPage() {
       </form>
     </section>}
 
+    {createdIntegration && <section className="creation-success" aria-live="polite">
+      <div className="creation-success__head"><div><span className="eyebrow">INTEGRATION READY</span><h2>{createdIntegration.name} is ready to protect</h2></div><button className="icon-button" onClick={() => setCreatedIntegration(undefined)} aria-label="Dismiss generated proxy URL"><X size={19} /></button></div>
+      <ProxyUrlPanel integration={createdIntegration} />
+    </section>}
+
     {remote.loading && !remote.data && <LoadingBlock rows={4} />}
     {remote.error && !remote.data && <ErrorBlock message={remote.error.message} onRetry={() => void remote.refresh()} />}
     {remote.data && <>
@@ -91,22 +116,86 @@ export function IntegrationsPage() {
       </section>
       <div className="filter-bar"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search integrations" aria-label="Search integrations" /><span>{filtered.length} shown</span></div>
       {filtered.length ? <section className="integration-grid">
-        {filtered.map((integration) => <IntegrationCard integration={integration} key={integrationKey(integration)} />)}
+        {filtered.map((integration) => <IntegrationCard integration={integration} key={integrationKey(integration)} deleting={deleting && integrationKey(deleteTarget ?? integration) === integrationKey(integration)} onDelete={() => { setDeleteError(undefined); setDeleteTarget(integration) }} />)}
       </section> : <EmptyBlock title={query ? 'No matching integrations' : 'No integrations configured'} body={query ? 'Try a different name, status, URL, or category.' : 'Add a customer-managed API integration to begin monitoring and enforcement.'} />}
     </>}
+    <DeleteIntegrationDialog integration={deleteTarget} busy={deleting} error={deleteError} onClose={() => { if (!deleting) { setDeleteTarget(undefined); setDeleteError(undefined) } }} onConfirm={() => void confirmDelete()} />
   </div>
 }
 
-function IntegrationCard({ integration }: { integration: Integration }) {
+function IntegrationCard({ integration, deleting, onDelete }: { integration: Integration; deleting: boolean; onDelete: () => void }) {
   const authStatus = credentialStatus(integration.authType, integration.hasAuthCredential)
-  return <Link to={`/integrations/${encodeURIComponent(integrationKey(integration))}`} className="integration-card">
-    <div className="integration-card__top"><span className="provider-avatar">{integration.name.slice(0, 1).toUpperCase()}</span><StatusBadge value={integration.status} /></div>
-    <div className="integration-card__title"><h2>{integration.name}</h2><p>{integration.description ?? 'Customer-configured third-party API integration'}</p></div>
-    <div className="integration-url"><Globe2 size={14} /><span>{integration.upstreamUrl ?? 'No upstream URL returned'}</span></div>
-    <div className="integration-card__metrics"><div><span>Total requests</span><strong>{formatNumber(integration.totalRequests ?? integration.protectedRequests)}</strong></div><div><span>Risk score</span><strong>{formatNumber(integration.riskScore)}</strong></div></div>
-    <div className="credential-line"><KeyRound size={14} /><span>{formatAuthType(integration.authType)} · {authStatus}</span></div>
-    <div className="integration-card__foot"><span>Last activity: {formatTime(integration.lastSeen)}</span><ArrowRight size={17} /></div>
-  </Link>
+  return <article className="integration-card">
+    <Link to={`/integrations/${encodeURIComponent(integrationKey(integration))}`} className="integration-card__body" aria-label={`View ${integration.name} integration details`}>
+      <div className="integration-card__top"><span className="provider-avatar">{integration.name.slice(0, 1).toUpperCase()}</span><StatusBadge value={integration.status} /></div>
+      <div className="integration-card__title"><h2>{integration.name}</h2><p>{integration.description ?? 'Customer-configured third-party API integration'}</p></div>
+      <div className="integration-url"><Globe2 size={14} /><span>{integration.upstreamUrl ?? 'No upstream URL returned'}</span></div>
+      <ProxyUrlPanel integration={integration} compact />
+      <div className="integration-card__metrics"><div><span>Total requests</span><strong>{formatNumber(integration.totalRequests ?? integration.protectedRequests)}</strong></div><div><span>Risk score</span><strong>{formatNumber(integration.riskScore)}</strong></div></div>
+      <div className="credential-line"><KeyRound size={14} /><span>{formatAuthType(integration.authType)} · {authStatus}</span></div>
+      <div className="integration-card__foot"><span>Last activity: {formatTime(integration.lastSeen)}</span><ArrowRight size={17} /></div>
+    </Link>
+    <div className="integration-card__actions"><CopyUrlButton url={integrationProxyUrl(integration)} /><button className="button button--danger button--small" onClick={onDelete} disabled={deleting}>{deleting ? 'Deleting…' : <><Trash2 size={14} />Delete</>}</button></div>
+  </article>
+}
+
+function CopyUrlButton({ url }: { url: string }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+
+  const fallbackCopy = () => {
+    const textArea = document.createElement('textarea')
+    textArea.value = url
+    textArea.setAttribute('readonly', '')
+    textArea.style.position = 'fixed'
+    textArea.style.opacity = '0'
+    document.body.appendChild(textArea)
+    textArea.select()
+    const copied = document.execCommand('copy')
+    textArea.remove()
+    if (!copied) throw new Error('Copy command was not accepted.')
+  }
+
+  const copy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(url)
+      else fallbackCopy()
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 1800)
+    } catch {
+      try {
+        fallbackCopy()
+        setCopyState('copied')
+        window.setTimeout(() => setCopyState('idle'), 1800)
+      } catch {
+        setCopyState('error')
+      }
+    }
+  }
+
+  const label = copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy URL'
+  return <button className="button button--secondary button--small" onClick={() => void copy()} aria-label="Copy generated CipherGuard proxy URL">
+    {copyState === 'copied' ? <Check size={14} /> : <Copy size={14} />}{label}
+  </button>
+}
+
+function ProxyUrlPanel({ integration, compact = false }: { integration: Integration; compact?: boolean }) {
+  const url = integrationProxyUrl(integration)
+  return <div className={`proxy-url-panel${compact ? ' proxy-url-panel--compact' : ''}`}>
+    <div className="proxy-url-panel__content"><span>Generated CipherGuard Proxy URL</span><code title={url}>{url}</code>{!compact && <p>Use this as the API base URL in your customer application.</p>}</div>
+    {!compact && <CopyUrlButton url={url} />}
+  </div>
+}
+
+function DeleteIntegrationDialog({ integration, busy, error, onClose, onConfirm }: { integration?: Integration; busy: boolean; error?: string; onClose: () => void; onConfirm: () => void }) {
+  if (!integration) return null
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <section className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-integration-title">
+      <div className="modal-head"><div><span className="eyebrow">DESTRUCTIVE ACTION</span><h2 id="delete-integration-title">Delete integration?</h2></div><button className="icon-button" onClick={onClose} disabled={busy} aria-label="Close delete confirmation"><X size={19} /></button></div>
+      <p>Delete <strong>{integration.name}</strong>? Its configuration will no longer be available to CipherGuard. This cannot be undone.</p>
+      {error && <p className="action-error" role="alert">{error}</p>}
+      <div className="confirmation-modal__actions"><button className="button button--secondary" onClick={onClose} disabled={busy}>Cancel</button><button className="button button--danger" onClick={onConfirm} disabled={busy}>{busy ? 'Deleting…' : <><Trash2 size={15} />Delete Integration</>}</button></div>
+    </section>
+  </div>
 }
 
 interface DetailData {
@@ -123,7 +212,11 @@ const safeDecode = (value: string) => {
 export function IntegrationDetailPage() {
   const { id = '' } = useParams()
   const integrationId = safeDecode(id)
+  const navigate = useNavigate()
   const [selectedEvent, setSelectedEvent] = useState<TrafficEvent>()
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string>()
   const remote = useRemote<DetailData>(async () => {
     const relatedUnavailable: string[] = []
     const [integration, traffic, alerts] = await Promise.all([
@@ -139,17 +232,32 @@ export function IntegrationDetailPage() {
   const blocked = data ? data.integration.blockedRequests ?? data.traffic.filter((event) => isBlocked(event.decision)).length : undefined
   const authStatus = data ? credentialStatus(data.integration.authType, data.integration.hasAuthCredential) : '—'
 
+  const confirmDelete = async () => {
+    if (!data) return
+    setDeleting(true)
+    setDeleteError(undefined)
+    try {
+      await cipherguardApi.deleteIntegration(integrationKey(data.integration))
+      navigate('/integrations', { replace: true })
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Unable to delete integration.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return <div className="page integration-detail-page">
     <Link to="/integrations" className="back-link">← All integrations</Link>
     {remote.loading && !data && <LoadingBlock rows={5} />}
     {remote.error && !data && <ErrorBlock message={remote.error.message} onRetry={() => void remote.refresh()} />}
     {data && <>
-      <PageHeader eyebrow="INTEGRATION DETAILS" title={data.integration.name} description="A dynamic view of the customer-configured upstream API, its authentication status, and the traffic CipherGuard observed." action={<RefreshButton onClick={() => void remote.refresh()} busy={remote.loading} />} />
+      <PageHeader eyebrow="INTEGRATION DETAILS" title={data.integration.name} description="A dynamic view of the customer-configured upstream API, its authentication status, and the traffic CipherGuard observed." action={<div className="header-actions"><RefreshButton onClick={() => void remote.refresh()} busy={remote.loading} /><button className="button button--danger" onClick={() => { setDeleteError(undefined); setShowDeleteConfirmation(true) }}><Trash2 size={15} />Delete Integration</button></div>} />
       {data.relatedUnavailable.length > 0 && <ErrorBlock compact message={`The integration loaded, but related ${data.relatedUnavailable.join(' and ')} could not be retrieved.`} onRetry={() => void remote.refresh()} />}
       <section className="detail-hero">
         <div className="detail-identity"><span className="provider-avatar provider-avatar--large">{data.integration.name.slice(0, 1).toUpperCase()}</span><div><StatusBadge value={data.integration.status} /><p>{data.integration.description ?? 'Customer-configured third-party API integration'}</p></div></div>
         <div className="detail-health"><span>Risk posture</span><strong>{data.integration.riskLevel ? `${data.integration.riskLevel} · ` : ''}{formatNumber(data.integration.riskScore)}</strong></div>
       </section>
+      <ProxyUrlPanel integration={data.integration} />
       <section className="detail-metadata-grid">
         <div><span>Connection status</span><strong><StatusBadge value={data.integration.status} /></strong></div>
         <div><span>Upstream URL</span><strong>{data.integration.upstreamUrl ?? 'Not returned'}</strong></div>
@@ -172,6 +280,7 @@ export function IntegrationDetailPage() {
         </section>
       </section>
       <RequestDetailsModal event={selectedEvent} onClose={() => setSelectedEvent(undefined)} />
+      <DeleteIntegrationDialog integration={showDeleteConfirmation ? data.integration : undefined} busy={deleting} error={deleteError} onClose={() => { if (!deleting) { setShowDeleteConfirmation(false); setDeleteError(undefined) } }} onConfirm={() => void confirmDelete()} />
     </>}
   </div>
 }

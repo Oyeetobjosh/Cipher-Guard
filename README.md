@@ -21,6 +21,7 @@ These are the exact routes from [`docs/API.md`](docs/API.md), all prefixed by th
 | --- | --- |
 | Integrations | `GET /api/v1/integrations` |
 | Integration detail | `GET /api/v1/integrations/{id_or_slug}` |
+| Delete integration | `DELETE /api/v1/integrations/{id_or_slug}` |
 | Traffic events | `GET /api/v1/traffic` |
 | Traffic totals | `GET /api/v1/traffic/stats` |
 | Alerts | `GET /api/v1/alerts` |
@@ -37,12 +38,15 @@ The browser client sends `Authorization: Bearer <VITE_API_TOKEN>` when a token i
 cp .env.example .env.local
 ```
 
-Set the public gateway origin in `.env.local`:
+Set the public management API origin and (when different) the public proxy origin in `.env.local`:
 
 ```env
 VITE_API_BASE_URL=https://your-deployed-cipherguard-gateway.example
+VITE_CIPHERGUARD_PUBLIC_GATEWAY_URL=https://your-deployed-cipherguard-gateway.example
 VITE_API_TOKEN=your_supabase_user_access_token
 ```
+
+The Integrations inventory and detail view show a **Generated CipherGuard Proxy URL** for each integration. Give this URL to the customer application as its API base URL; it keeps its normal request paths while CipherGuard enforces policies, logs traffic, and then blocks or forwards requests. The UI uses the backend gateway endpoint when supplied and otherwise derives `/api/integrations/{integration-slug}`. It never displays integration credentials or secrets.
 
 The default Vite endpoint paths already match the backend. They are individually overridable in `.env.example` only for a custom deployment. The deployed backend must allow the dashboard origin in `ALLOWED_ORIGINS` (or be proxied through the dashboard host).
 
