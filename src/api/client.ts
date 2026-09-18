@@ -158,6 +158,10 @@ export const cipherguardApi = {
     })))
   },
 
+  async deleteIntegration(idOrSlug: string): Promise<void> {
+    await request<unknown>(resourceUrl('integrations', idOrSlug), { method: 'DELETE' })
+  },
+
   async getTraffic(query?: Record<string, QueryValue>): Promise<TrafficEvent[]> {
     return toRecords(await request<unknown>(endpointUrl('traffic', query))).map(normalizeTraffic)
   },

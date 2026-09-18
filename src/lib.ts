@@ -70,6 +70,33 @@ export const slugify = (value: string) => value
 
 export const integrationKey = (integration: Integration) => integration.id || integration.slug || integration.name
 
+/**
+ * The public gateway is intentionally separate from the management API base.
+ * Backend gateway fields may be relative or absolute; only their path is used
+ * so the UI never renders an upstream host, credentials, or query parameters.
+ */
+const publicGatewayOrigin = () => (import.meta.env.VITE_CIPHERGUARD_PUBLIC_GATEWAY_URL?.trim() || 'https://cipher-guard-eight.vercel.app').replace(/\/+$/, '')
+
+const proxyPath = (gatewayUrl?: string): string | undefined => {
+  if (!gatewayUrl?.trim()) return undefined
+  try {
+    const url = new URL(gatewayUrl, publicGatewayOrigin())
+    return ['http:', 'https:'].includes(url.protocol) ? url.pathname : undefined
+  } catch {
+    return gatewayUrl.split(/[?#]/, 1)[0]
+  }
+}
+
+export const integrationProxyUrl = (integration: Integration): string => {
+  const returnedPath = proxyPath(integration.gatewayUrl)
+  if (returnedPath) return `${publicGatewayOrigin()}${returnedPath.startsWith('/') ? returnedPath : `/${returnedPath}`}`
+
+  // The backend accepts a slug and returns it for integrations it creates. The
+  // name fallback matches the create request's deterministic slug generation.
+  const slug = integration.slug || slugify(integration.name)
+  return `${publicGatewayOrigin()}/api/integrations/${encodeURIComponent(slug)}`
+}
+
 export const formatAuthType = (authType?: string) => {
   const normalized = normalizeWord(authType)
   if (!normalized || normalized === 'none') return 'None'
