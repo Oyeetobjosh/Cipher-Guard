@@ -4,18 +4,17 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { apiConfig } from '../api/client'
 
 const navigation = [
-  { to: '/', label: 'Dashboard', end: true },
+  { to: '/', label: 'Overview', end: true },
   { to: '/integrations', label: 'Integrations' },
   { to: '/traffic', label: 'Traffic' },
-  { to: '/alerts', label: 'Alerts' },
   { to: '/policies', label: 'Policies' },
-  { to: '/risk', label: 'Risk analytics' },
+  { to: '/alerts', label: 'Alerts' },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
-  const section = navigation.find((item) => item.to === location.pathname)?.label ?? 'Integration details'
+  const section = navigation.find((item) => item.to === location.pathname)?.label ?? 'Integration Details'
 
   return (
     <div className="app-shell">
@@ -25,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span>Cipher<span>Guard</span></span>
           <button className="icon-button close-nav" onClick={() => setMenuOpen(false)} aria-label="Close navigation"><X size={19} /></button>
         </div>
-        <div className="workspace-label">SECURITY OPERATIONS</div>
+        <div className="workspace-label">SECURITY CONTROL PLANE</div>
         <nav className="nav-list">
           {navigation.map((item) => (
             <NavLink
@@ -42,8 +41,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-foot">
           <span className={`connection-dot ${apiConfig.isConfigured ? 'connection-dot--ready' : 'connection-dot--attention'}`} />
           <div>
-            <strong>{apiConfig.isConfigured ? 'API configured' : 'API not configured'}</strong>
-            <small>{apiConfig.isConfigured ? 'Live data connection' : 'Add VITE_API_BASE_URL'}</small>
+            <strong>{apiConfig.isConfigured ? 'API connected' : 'API not configured'}</strong>
+            <small>{apiConfig.isConfigured ? 'Dynamic backend data' : 'Add VITE_API_BASE_URL'}</small>
           </div>
         </div>
       </aside>
@@ -51,7 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="main-content">
         <header className="topbar">
           <button className="icon-button menu-button" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu size={20} /></button>
-          <div className="breadcrumb"><span>Security center</span><b>/</b><strong>{section}</strong></div>
+          <div className="breadcrumb"><span>CipherGuard</span><b>/</b><strong>{section}</strong></div>
           <div className="topbar-actions">
             <button className="notification-button" aria-label="Notifications"><Bell size={18} /><span /></button>
             <button className="profile-button" aria-label="Account menu"><span className="avatar">CG</span><span className="profile-name">Security team</span><ChevronDown size={15} /></button>

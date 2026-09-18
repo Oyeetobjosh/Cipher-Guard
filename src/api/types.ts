@@ -1,17 +1,26 @@
 export type RawRecord = Record<string, unknown>
 
+export type AuthType = 'none' | 'api_key' | 'bearer_token' | 'basic_auth'
+export type PolicyAction = 'allow' | 'block' | 'alert' | 'log'
+
 export interface Integration {
   id: string
+  slug?: string
   name: string
-  provider: string
   type: string
   status: string
   lastSeen?: string
   observedEndpoints?: number
   protectedRequests?: number
   blockedRequests?: number
+  allowedRequests?: number
+  totalRequests?: number
   riskScore?: number
+  riskLevel?: string
   gatewayUrl?: string
+  upstreamUrl?: string
+  authType?: AuthType | string
+  hasAuthCredential?: boolean
   description?: string
   raw: RawRecord
 }
@@ -27,8 +36,13 @@ export interface TrafficEvent {
   statusCode?: number
   decision?: string
   risk?: string
+  riskScore?: number
+  riskLevel?: string
   latency?: number
   policy?: string
+  matchedPolicies: string[]
+  reason?: string
+  forwardedUpstream?: boolean
   raw: RawRecord
 }
 
@@ -41,6 +55,10 @@ export interface SecurityAlert {
   createdAt?: string
   integration?: string
   integrationId?: string
+  endpoint?: string
+  reason?: string
+  riskScore?: number
+  action?: string
   policy?: string
   raw: RawRecord
 }
@@ -48,13 +66,36 @@ export interface SecurityAlert {
 export interface Policy {
   id: string
   name: string
+  integrationId?: string
   description?: string
   enabled: boolean
   mode?: string
   scope?: string
+  allowedMethods: string[]
+  allowedEndpoints: string[]
+  blockedEndpoints: string[]
+  rateLimitRpm?: number
+  action: string
   updatedAt?: string
   violations?: number
   raw: RawRecord
+}
+
+export interface IntegrationCreatePayload {
+  name: string
+  description?: string
+  upstreamUrl: string
+  authType: AuthType
+  credential?: string
+}
+
+export interface PolicyCreatePayload {
+  integrationId: string
+  ruleType: 'allow' | 'block'
+  method: string
+  endpointPattern: string
+  action: PolicyAction
+  description?: string
 }
 
 export interface Metric {
